@@ -14,6 +14,7 @@ import jmespath
 from termcolor import colored
 from dateutil.parser import parse
 from dateutil.tz import tzutc
+import time
 
 from . import exceptions
 
@@ -61,6 +62,7 @@ class AWSLogs(object):
             aws_session_token=self.aws_session_token,
             region_name=self.aws_region
         )
+        self.paceSelf_prevTime = 0
 
     def _get_streams_from_pattern(self, group, pattern):
         """Returns streams in ``group`` matching ``pattern``."""
@@ -218,15 +220,27 @@ class AWSLogs(object):
             for group in page.get('logGroups', []):
                 yield group['logGroupName']
 
+    def pace_myself(self):
+        curDelay = time.time() - self.paceSelf_prevTime
+        if curDelay < 0.2:
+            sleepAmount = 0.2 - curDelay
+            print("Sleeping for %{0}".format(sleepAmount))
+            time.sleep(sleepAmount)
+            self.paceSelf_prevTime = time.time()
+        return
+
     def get_streams(self, log_group_name=None):
         """Returns available CloudWatch logs streams in ``log_group_name``."""
         kwargs = {'logGroupName': log_group_name or self.log_group_name}
         window_start = self.start or 0
         window_end = self.end or sys.float_info.max
-
         paginator = self.client.get_paginator('describe_log_streams')
         for page in paginator.paginate(**kwargs):
+            print(f"get_streams():  lgn: {log_group_name} page: {page}") 
+            self.pace_myself()
             for stream in page.get('logStreams', []):
+                print(f"get_streams():  stream: {stream}") 
+                self.pace_myself()
                 if 'firstEventTimestamp' not in stream:
                     # This is a specified log stream rather than
                     # a filter on the whole log group, so there's
